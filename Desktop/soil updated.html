@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Team HydroGuardians | Biochar & Soil Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { background-color: #0f172a; color: #f8fafc; font-family: 'Segoe UI', Tahoma, sans-serif; overflow-x: hidden; }
+        .card { background-color: #1e293b; border: 1px solid #334155; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .text-accent { color: #10b981; } 
+        .metric-value { font-size: 2.5rem; font-weight: 700; margin: 0; }
+        
+        .bot-container { 
+            border-left: 4px solid #3b82f6; 
+            background-color: #172554; 
+            padding: 15px; 
+            border-radius: 8px; 
+            transition: background-color 0.5s ease; 
+            color: #f8fafc; 
+            max-height: 450px;
+            overflow-y: auto;
+        }
+        
+        .bot-container::-webkit-scrollbar { width: 6px; }
+        .bot-container::-webkit-scrollbar-track { background: #1e293b; }
+        .bot-container::-webkit-scrollbar-thumb { background: #3b82f6; border-radius: 4px; }
+
+        .live-indicator { display: inline-block; width: 10px; height: 10px; background-color: #ef4444; border-radius: 50%; margin-right: 8px; transition: all 0.3s; }
+        .live-active { background-color: #10b981; box-shadow: 0 0 10px #10b981; }
+
+        .rx-item { background: rgba(255,255,255,0.05); border-left: 3px solid #f59e0b; padding: 10px; margin-bottom: 8px; border-radius: 4px; font-size: 0.9rem; color: #f8fafc; }
+        .rx-item.ok { border-left-color: #10b981; opacity: 0.9; }
+        
+        .biochar-card { background: linear-gradient(145deg, #1e293b, #0f172a); border: 1px solid #f59e0b; }
+        .cost-highlight { font-size: 1.5rem; font-weight: bold; color: #f59e0b; }
+    </style>
+</head>
+<body>
+
+<div class="container-fluid py-4 px-4">
+    <div class="row mb-4 align-items-center header-anim">
+        <div class="col-md-12">
+            <h1 class="fw-bold"><i class="fa-solid fa-seedling text-accent"></i> CropsVeda</h1>
+            <p class="text-secondary mb-0"><span id="syncStatus" class="live-indicator"></span> <span id="syncText">Probe inactive. Waiting for EC detection...</span></p>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4 metrics-anim">
+        <div class="col-md-3"><div class="card p-3 text-center"><h6 class="text-secondary">Soil Org. Carbon (SOC)</h6><p class="metric-value text-accent" id="valSOC">0</p><small>% Profile</small></div></div>
+        <div class="col-md-3"><div class="card p-3 text-center"><h6 class="text-secondary">Soil Org. Matter (SOM)</h6><p class="metric-value text-success" id="valSOM">0</p><small>% (Van Bemmelen)</small></div></div>
+        <div class="col-md-3"><div class="card p-3 text-center"><h6 class="text-secondary">Base EC</h6><p class="metric-value text-warning" id="valEC">0</p><small>µS/cm</small></div></div>
+        <div class="col-md-3"><div class="card p-3 text-center"><h6 class="text-secondary">Temperature</h6><p class="metric-value text-danger" id="valTemp">0</p><small>°C</small></div></div>
+        
+        <div class="col-md-4"><div class="card p-3"><h6 class="text-secondary">Hardware Nitrogen (N)</h6><p class="metric-value text-white" id="valN">0 <span class="fs-6">mg/kg</span></p></div></div>
+        <div class="col-md-4"><div class="card p-3"><h6 class="text-secondary">Hardware Phosphorus (P)</h6><p class="metric-value text-white" id="valP">0 <span class="fs-6">mg/kg</span></p></div></div>
+        <div class="col-md-4"><div class="card p-3"><h6 class="text-secondary">Hardware Potassium (K)</h6><p class="metric-value text-white" id="valK">0 <span class="fs-6">mg/kg</span></p></div></div>
+        
+        <div class="col-md-6"><div class="card p-3"><h6 class="text-secondary">pH Level</h6><p class="metric-value text-white" id="valPH">0</p></div></div>
+        <div class="col-md-6"><div class="card p-3"><h6 class="text-secondary">Moisture</h6><p class="metric-value text-info" id="valMoist">0 <span class="fs-6">%</span></p></div></div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-md-7 graph-anim">
+            <div class="card biochar-card p-4 h-100">
+                <h5 class="mb-3 text-warning"><i class="fa-solid fa-fire text-danger"></i> Activated Biochar Prescription (Per Acre)</h5>
+                <p class="text-secondary" style="font-size: 0.9rem;">Calculates a standard 1-acre biochar cocktail (coconut shell/sugarcane bagasse base @ ₹70/kg) activated with targeted microbials based on live ESP32 deficits.</p>
+                
+                <div class="row align-items-center mb-3">
+                    <div class="col-12">
+                        <button class="btn btn-warning w-100 fw-bold" id="btnCalculateBiochar"><i class="fa-solid fa-calculator"></i> Generate Prescription & Save</button>
+                    </div>
+                </div>
+
+                <div id="biocharResult" class="mt-3 p-3 rounded" style="background: rgba(0,0,0,0.3); border: 1px solid #334155; min-height: 200px;">
+                    <p class="text-center text-secondary mb-0 mt-4"><i class="fa-solid fa-arrows-rotate fa-spin"></i> Insert probe into soil to run analysis...</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-5 bot-anim">
+            <div class="card p-4 h-100">
+                <h5 class="mb-3"><i class="fa-solid fa-robot text-primary"></i> General Agronomic Status</h5>
+                <div class="bot-container" id="botBox">
+                    <div id="aiSuggestion" class="w-100">
+                        <p class="fs-5 mb-0 mt-3 text-center text-white">Awaiting ESP32 EC detection...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+    import { getDatabase, ref, onValue, update } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-database.js";
+
+    // 1. FIREBASE CONFIGURATION
+    const firebaseConfig = {
+        apiKey: "AIzaSyAB-mYAbTISfuRMhfDlAzZjHIJaNso1CYg",
+        authDomain: "soil-tester-6895a.firebaseapp.com",
+        databaseURL: "https://soil-tester-6895a-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "soil-tester-6895a",
+        storageBucket: "soil-tester-6895a.firebasestorage.app",
+        messagingSenderId: "509520565416",
+        appId: "1:509520565416:web:637fe38cadb95798a15e9d"
+    };
+    
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    let latestData = null;
+
+    // 2. INDIAN SOIL AI ENGINE (General Status)
+    function generateAISuggestion(data) {
+        let alerts = [];
+        let htmlOutput = "";
+
+        if (data.pH > 0 && data.pH < 5.5) alerts.push("⚠️ <b>High Acidity:</b> Root nutrient lockout.");
+        if (data.pH > 7.5) alerts.push("⚠️ <b>High Alkalinity:</b> Trace metals locked out.");
+        if (data.EC > 2000) alerts.push(`⚠️ <b>High Salinity (${data.EC} µS):</b> Osmotic stress risk.`);
+        
+        // --- INDIAN CONTEXT CARBON LOGIC ---
+        if (data.SOC > 0 && data.SOC < 0.4) {
+            alerts.push(`⚠️ <b>Severely Depleted (${data.SOC}%):</b> Soil is sterile.`);
+        } else if (data.SOC >= 0.4 && data.SOC <= 0.8) {
+            alerts.push(`ℹ️ <b>Typical Indian Soil (${data.SOC}%):</b> Standard for tropical climates. Boost to 1.0% recommended.`);
+        } else if (data.SOC > 0.8 && data.SOC <= 1.2) {
+            alerts.push(`✅ <b class="text-success">Excellent Carbon (${data.SOC}%):</b> Peak fertility for Indian topography!`);
+        } else if (data.SOC > 1.2) {
+            alerts.push(`⚠️ <b>Anomalous Carbon (${data.SOC}%):</b> Check for waterlogging.`);
+        }
+        
+        if (alerts.length > 0) {
+            htmlOutput += `<h6 class="text-warning mb-2 border-bottom border-secondary pb-1"><i class="fa-solid fa-triangle-exclamation"></i> Soil Health Alerts</h6>`;
+            htmlOutput += `<ul class="mb-3 text-white" style="font-size: 0.85rem;">`;
+            alerts.forEach(a => htmlOutput += `<li>${a}</li>`);
+            htmlOutput += `</ul>`;
+        } else {
+             htmlOutput += `<h6 class="text-success"><i class="fa-solid fa-check"></i> Soil profiles stable.</h6>`;
+        }
+
+        document.getElementById('aiSuggestion').innerHTML = htmlOutput;
+        gsap.fromTo("#botBox", { backgroundColor: '#1e3a8a' }, { backgroundColor: '#172554', duration: 1 });
+    }
+
+    // ==========================================
+    // 3. THE CUSTOM BIOCHAR ENGINE (PER ACRE)
+    // ==========================================
+    document.getElementById('btnCalculateBiochar').addEventListener('click', () => {
+        if(!latestData || latestData.EC <= 0) {
+            alert("Probe not detecting soil. Please ensure ESP32 is reading an EC value > 0.");
+            return;
+        }
+
+        // Base Biochar Calculation (Standard 1 Acre Prescription)
+        let biocharRate = 200; // 200kg per acre
+        let baseCostINR = biocharRate * 70; // ₹70/kg
+        
+        let activators = [];
+        let activatorCost = 0;
+
+        // Condition 1: Nitrogen Managers
+        if (latestData.Nitrogen < 100) { 
+            let cost = 400; // 1 Liter cost for 1 acre
+            activators.push({
+                name: "Nitrogen Managers",
+                biology: "Nitrosomonas europaea & Nitrobacter winogradskyi",
+                action: "Converts locked urea into Nitrate (NO3).",
+                cost: cost
+            });
+            activatorCost += cost;
+        }
+
+        // Condition 2: Phosphorus Unlockers
+        if (latestData.Phosphorus < 40) {
+            let cost = 100; 
+            activators.push({
+                name: "Phosphorus Unlockers",
+                biology: "Phosphatase (Enzyme) via Bacillus megaterium",
+                action: "Snips chemical bonds making phosphorus water-soluble.",
+                cost: cost
+            });
+            activatorCost += cost;
+        }
+
+        // Condition 3: Compost Accelerators
+        if (latestData.SOC < 0.8) {
+            let cost = 150; 
+            activators.push({
+                name: "Compost Accelerators",
+                biology: "Cellulase & Ligninase",
+                action: "Rapidly breaks down dead plant waste into free compost.",
+                cost: cost
+            });
+            activatorCost += cost;
+        }
+
+        // Condition 4: Root Extenders
+        if (latestData.Moisture < 30) {
+            let cost = 300; 
+            activators.push({
+                name: "Root Extenders",
+                biology: "Rhizophagus irregularis (VAM)",
+                action: "Multiplies root surface area by 100x to scavenge deep water.",
+                cost: cost
+            });
+            activatorCost += cost;
+        }
+
+        let totalCostINR = baseCostINR + activatorCost;
+
+        // Build UI Output
+        let rxHtml = `<h6 class="text-light border-bottom border-secondary pb-2">Base Carrier: Sugarcane Bagasse/Coconut Shell</h6>
+                      <p class="text-white mb-1">Required Quantity: <span class="fw-bold text-info">${biocharRate} kg</span> (Per Acre Baseline)</p>
+                      <p class="text-white mb-3">Base Cost: <span class="fw-bold">₹${baseCostINR.toLocaleString()}</span> (@ ₹70/kg)</p>
+                      
+                      <h6 class="text-light border-bottom border-secondary pb-2 mt-4">Microbial Activation Cocktail Needed</h6>`;
+        
+        if(activators.length === 0) {
+             rxHtml += `<p class="text-success"><i class="fa-solid fa-check"></i> Soil biology optimal. Base biochar application sufficient.</p>`;
+        } else {
+            rxHtml += `<ul class="list-unstyled text-white" style="font-size:0.85rem;">`;
+            activators.forEach(act => {
+                rxHtml += `<li class="mb-3 p-2 rounded" style="background: rgba(255,255,255,0.05); border-left: 3px solid #10b981;">
+                              <strong class="text-accent">${act.name}</strong> <span class="text-warning float-end">₹${act.cost.toLocaleString()}</span><br>
+                              <i>${act.biology}</i><br>
+                              <span class="text-secondary">${act.action}</span>
+                           </li>`;
+            });
+            rxHtml += `</ul>`;
+        }
+
+        rxHtml += `<div class="mt-4 pt-3 border-top border-secondary text-end">
+                      <span class="text-secondary d-block">Estimated Total Cost (Per Acre)</span>
+                      <span class="cost-highlight">₹${totalCostINR.toLocaleString()}</span>
+                   </div>`;
+
+        document.getElementById('biocharResult').innerHTML = rxHtml;
+        gsap.from("#biocharResult", {opacity: 0, y: 10, duration: 0.5});
+
+        // Write to Firebase
+        const prescriptionRef = ref(db, 'SoilData/LatestScan/BiocharPrescription');
+        update(prescriptionRef, {
+            timestamp: new Date().toISOString(),
+            farmSizeAcres: 1, // Standardized to 1
+            totalBiocharKg: biocharRate,
+            baseCostINR: baseCostINR,
+            activatorCostINR: activatorCost,
+            totalCostINR: totalCostINR,
+            recommendedActivators: activators.map(a => a.name).join(", ") || "None Required"
+        }).then(() => {
+            const btn = document.getElementById('btnCalculateBiochar');
+            let originalText = btn.innerHTML;
+            btn.innerHTML = `<i class="fa-solid fa-cloud-arrow-up"></i> Saved to Cloud!`;
+            btn.classList.replace('btn-warning', 'btn-success');
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+                btn.classList.replace('btn-success', 'btn-warning');
+            }, 2000);
+        });
+    });
+
+    // ==========================================
+    // 4. FIREBASE LISTENER (EC DETECTION TRIGGER)
+    // ==========================================
+    const dataRef = ref(db, 'SoilData/LatestScan');
+    onValue(dataRef, (snapshot) => {
+        const data = snapshot.val();
+        
+        // CRITICAL CHECK: Only update the UI if the sensor is actually reading EC > 0
+        if (data && data.EC > 0) {
+            latestData = data;
+
+            // Activate Header Indicator
+            const indicator = document.getElementById('syncStatus');
+            indicator.classList.add('live-active');
+            document.getElementById('syncText').textContent = "Live Telemetry Active";
+            setTimeout(() => indicator.classList.remove('live-active'), 500);
+
+            // Populate Dash
+            document.getElementById('valSOC').innerText = data.SOC ? data.SOC.toFixed(2) : 0;
+            document.getElementById('valSOM').innerText = data.SOM ? data.SOM.toFixed(2) : 0;
+            document.getElementById('valEC').innerText = data.EC || 0;
+            document.getElementById('valTemp').innerText = data.Temperature || 0;
+            document.getElementById('valN').innerText = data.Nitrogen || 0;
+            document.getElementById('valP').innerText = data.Phosphorus || 0;
+            document.getElementById('valK').innerText = data.Potassium || 0;
+            document.getElementById('valPH').innerText = data.pH ? data.pH.toFixed(1) : 0;
+            document.getElementById('valMoist').innerText = data.Moisture ? data.Moisture.toFixed(1) : 0;
+
+            generateAISuggestion(data);
+        }
+    });
+
+    window.onload = () => {
+        gsap.from(".header-anim", { opacity: 0, y: -20, duration: 0.8 });
+        gsap.from(".metrics-anim .card", { opacity: 0, y: 20, duration: 0.5, stagger: 0.1, delay: 0.3 });
+        gsap.from(".graph-anim", { opacity: 0, x: -20, duration: 0.8, delay: 0.8 });
+        gsap.from(".bot-anim", { opacity: 0, x: 20, duration: 0.8, delay: 0.8 });
+    };
+</script>
+</body>
+</html>
